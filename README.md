@@ -107,11 +107,18 @@ simulates the Stripe webhook (flips the flag, triggers the render, Jason confirm
 
 ## Memory
 
-Local files under `memory/`, laid out to mirror the future Supabase home (structured
-fields → columns, freeform notes → text, media → buckets): `agents/<email>/details.json`
-+ `profile.md` always load; `videos/<job>/` and `emails/` are read on demand. Moving to
-Supabase means writing a second `Store` implementation in `jason/storage.py` — nothing
-else changes.
+Local files under `memory/`, laid out to mirror the future production home:
+
+- **Supabase (Postgres)** — all text and structured memory: `details.json` fields →
+  columns, `profile.md`/`agency.md` → text columns, job state and email archives →
+  tables.
+- **Cloudflare R2** — all binary assets: listing photos, logos, amenity imagery,
+  render packages (S3-compatible; the render pipeline can pull photos directly).
+
+`agents/<email>/details.json` + `profile.md` always load; `videos/<job>/` and
+`emails/` are read on demand. Migrating means writing a second `Store` implementation
+in `jason/storage.py` (Supabase for the data methods, R2 for the media methods) —
+nothing else changes.
 
 ## Deferred (not built yet)
 
