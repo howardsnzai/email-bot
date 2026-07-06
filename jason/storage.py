@@ -206,7 +206,18 @@ _default_store: Store | None = None
 
 
 def get_store() -> Store:
+    """Backend selection: STORE_BACKEND=local|supabase, defaulting to Supabase
+    when SUPABASE_URL/SUPABASE_KEY are present, else local files."""
     global _default_store
     if _default_store is None:
-        _default_store = LocalFileStore()
+        import os
+
+        backend = os.environ.get("STORE_BACKEND", "").lower()
+        has_supabase = bool(os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_KEY"))
+        if backend == "supabase" or (not backend and has_supabase):
+            from jason.supabase_store import SupabaseStore
+
+            _default_store = SupabaseStore()
+        else:
+            _default_store = LocalFileStore()
     return _default_store

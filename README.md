@@ -107,7 +107,16 @@ simulates the Stripe webhook (flips the flag, triggers the render, Jason confirm
 
 ## Memory
 
-Local files under `memory/`, laid out to mirror the future production home:
+Two interchangeable backends behind the `Store` interface (`STORE_BACKEND=supabase|local`;
+Supabase is the default when `SUPABASE_URL`/`SUPABASE_KEY` are set):
+
+- **Supabase** (`jason/supabase_store.py`) — apply `migrations/001_memory.sql` in the
+  Supabase SQL editor first. Tables: `agents` (details jsonb + profile text),
+  `agencies`, `jobs` (full state jsonb + queryable status/paid columns), `video_jobs`,
+  `emails`. RLS is enabled with no policies, so only the secret key can reach the data.
+- **Local files** under `memory/`, same layout, for development.
+
+The production split:
 
 - **Supabase (Postgres)** — all text and structured memory: `details.json` fields →
   columns, `profile.md`/`agency.md` → text columns, job state and email archives →
