@@ -56,7 +56,11 @@ def mark_paid(store: Store, thread_id: str) -> dict:
     return job
 
 
-def find_thread_for_event(event_object: dict) -> str | None:
-    """Extract our thread id from a Stripe event's metadata."""
-    md = event_object.get("metadata") or {}
-    return md.get("thread_id")
+def find_thread_for_event(event_object) -> str | None:
+    """Extract our thread id from a Stripe event's metadata. StripeObject is
+    not a plain dict in recent SDKs, so only item access is safe."""
+    try:
+        md = event_object["metadata"] or {}
+        return md["thread_id"]
+    except (KeyError, TypeError):
+        return None
