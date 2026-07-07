@@ -17,14 +17,23 @@ def _int(name: str, default: int) -> int:
 
 # --- LLM ---
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
-OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "anthropic/claude-sonnet-5")
+OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "qwen/qwen3.6-flash")
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 # --- Gmail ---
 GMAIL_CREDENTIALS_FILE = os.environ.get("GMAIL_CREDENTIALS_FILE", "credentials.json")
 GMAIL_TOKEN_FILE = os.environ.get("GMAIL_TOKEN_FILE", "token.json")
-OPERATOR_EMAIL = os.environ.get("OPERATOR_EMAIL", "howardsnz.ai@gmail.com").lower()
+OPERATOR_EMAIL = os.environ.get("OPERATOR_EMAIL", "jasonfromhowards1@gmail.com").lower()
 POLL_INTERVAL_SECONDS = _int("POLL_INTERVAL_SECONDS", 30)
+GMAIL_SEARCH_QUERY = os.environ.get("GMAIL_SEARCH_QUERY", "in:inbox is:unread")
+GMAIL_IGNORED_SENDER_PATTERNS = [
+    p.strip().lower()
+    for p in os.environ.get(
+        "GMAIL_IGNORED_SENDER_PATTERNS",
+        "no-reply,noreply,donotreply,do-not-reply",
+    ).split(",")
+    if p.strip()
+]
 
 # --- Stripe ---
 STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY", "")
@@ -46,6 +55,8 @@ WEBHOOK_HOST = os.environ.get("WEBHOOK_HOST", "0.0.0.0")
 WEBHOOK_PORT = _int("WEBHOOK_PORT", 8000)
 
 # --- Storage ---
+SUPABASE_SCHEMA = os.environ.get("SUPABASE_SCHEMA", "jason_memory")
+SUPABASE_CUSTOMERS_TABLE = os.environ.get("SUPABASE_CUSTOMERS_TABLE", "customers")
 MEMORY_DIR = Path(os.environ.get("MEMORY_DIR", "./memory")).resolve()
 
 # --- Behaviour ---

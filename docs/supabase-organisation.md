@@ -15,39 +15,43 @@ agency pointers); the model reads and proposes freeform text (profile notes) tha
 commits. Never blur the two — a fact the system must rely on does not live inside a
 prose note.
 
-## Tables (schema in `migrations/001_memory.sql`)
+## One table (schema in `migrations/001_memory.sql`)
 
-- **`agents`** — one row per real-estate agent, keyed by **email address** (the
-  identity primary key of the whole system).
-  - `details jsonb` — structured: name, phone, agency pointer (a domain), branding
-    defaults, headshot key. Only whitelisted keys are written (see
-    `DETAILS_WHITELIST` in `jason/agent/tools.py`); the model proposes, code commits.
-  - `profile text` — freeform, append-only in spirit: durable preferences and
-    how-to-act notes, read as context on every email. One-off requests never land here.
-- **`agencies`** — one row per **email domain**. Shared branding (colours, standard
-  outro, disclaimers, office details) that every agent from that domain inherits via
-  their agency pointer. No duplication into agent rows — dereference at read time.
-- **`jobs`** — one row per **Gmail thread**; a job is one video order.
-  - The full job dict lives in `data jsonb`; `status` and `paid` are ALSO real columns
-    so they are queryable and auditable.
-  - `paid` is **code-owned**: written only by the Stripe-webhook code path. No model
-    write path exists to it, and no human should flip it by hand outside an incident.
-- **`video_jobs`** — completed/archived per-job history (style pack, video URL,
-  changes requested), keyed `(agent_email, job_id)`. This is what makes "same as my
-  last one" cheap.
-- **`emails`** — append-only archive of every exchange, `(agent_email, thread_id,
-  entry jsonb)`. Read on demand, never loaded wholesale into context.
+Everything lives in **`jason_memory.customers`** — one row per customer, keyed by
+**email address** (the identity primary key of the whole system):
+
+- `personal_details jsonb` — structured: name, phone, agency pointer (a domain),
+  branding defaults, headshot key. Only whitelisted keys are written (see
+  `DETAILS_WHITELIST` in `jason/agent/tools.py`); the model proposes, code commits.
+- `preferences text` — freeform, append-only in spirit: durable preferences and
+  how-to-act notes, read as context on every email. One-off requests never land here.
+- `past_jobs jsonb` — an array of job dicts, **one item per job**. A job is one video
+  order, keyed inside the item by `thread_id` (the Gmail thread) and `job_id`. Active
+  bookkeeping and per-job history (style pack, video URL, changes requested) merge
+  into the same item, so "same as my last one" stays cheap.
+  - `paid` inside a job item is **code-owned**: written only by the Stripe-webhook
+    code path. No model write path exists to it, and no human should flip it by hand
+    outside an incident.
+- `conversations jsonb` — append-only archive of every exchange, an array of
+  `{"thread_id": ..., "entry": {...}}`. Read on demand, never loaded wholesale into
+  context.
+
+**Agency rows share the table:** one row per **email domain** (the domain sits in the
+`email` column), shared branding notes in `preferences`. Every agent from that domain
+inherits it via their agency pointer — no duplication into agent rows; dereference at
+read time.
 
 ## Read/write conventions
 
-- **Always loaded per email:** the sender's `agents` row (details + profile) and the
-  thread's `jobs` row. Cheap, always relevant.
-- **On demand:** `video_jobs` and `emails` — Jason reaches in only when the
-  conversation needs history.
-- **Write-back at conversation end:** structured facts overwrite `details`; durable
-  preferences append to `profile`; completed jobs go to `video_jobs`; every message to
-  `emails`. Be conservative promoting preferences; be slower to overwrite a
-  long-standing preference on one contrary signal than to record a new fact.
+- **Always loaded per email:** the sender's `personal_details` + `preferences` and
+  the thread's job item. Cheap, always relevant.
+- **On demand:** `past_jobs` history and `conversations` — Jason reaches in only when
+  the conversation needs history.
+- **Write-back at conversation end:** structured facts overwrite `personal_details`;
+  durable preferences append to `preferences`; job state and completed jobs upsert
+  their `past_jobs` item; every message appends to `conversations`. Be conservative
+  promoting preferences; be slower to overwrite a long-standing preference on one
+  contrary signal than to record a new fact.
 
 ## Security posture
 
@@ -70,5 +74,5 @@ prose note.
 ## What does NOT go in Supabase
 
 Photos and any binary asset (R2), Stripe secrets or card data (Stripe holds it; we
-store only link/session ids in `jobs.data`), Gmail OAuth tokens (backend filesystem /
+store only link/session ids in the job item), Gmail OAuth tokens (backend filesystem /
 secret store), and prompts/code (the repo).

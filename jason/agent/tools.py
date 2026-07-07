@@ -30,7 +30,9 @@ TOOL_SCHEMAS = [
             "name": "send_email",
             "description": "Send your reply to the agent on this thread. This is the only way "
                            "your words reach them. Write a complete email (greeting, body, "
-                           "sign-off); the standing 'talk to a human' line is appended for you.",
+                           "sign-off); the standing 'talk to a human' line is appended for you. "
+                           "You may send at most ONE reply per inbound email — put everything "
+                           "in it; further calls will be refused.",
             "parameters": {
                 "type": "object",
                 "properties": {"body": {"type": "string", "description": "The full email body."}},
@@ -219,6 +221,9 @@ def _dispatch(ctx: ToolContext, name: str, args: dict) -> dict:
     store, thread_id = ctx.store, ctx.thread_id
 
     if name == "send_email":
+        if ctx.sent_replies:  # hard fence: one reply per inbound email, never two in a row
+            return {"error": "you have already sent your reply to this email; one reply "
+                             "per inbound message. Wait for the agent to respond."}
         body = (args.get("body") or "").rstrip()
         if not body:
             return {"error": "empty body"}

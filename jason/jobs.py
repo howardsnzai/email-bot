@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import time
 import uuid
+from pathlib import Path
 
 from PIL import Image
 
@@ -113,7 +114,7 @@ def check_photos(job: dict) -> dict:
         "usable": len(usable),
         "required": config.MIN_PHOTOS,
         "enough": len(usable) >= config.MIN_PHOTOS,
-        "weak_photos": [{"file": r["path"].rsplit("/", 1)[-1], "reason": r["reason"]} for r in weak],
+        "weak_photos": [{"file": Path(r["path"]).name, "reason": r["reason"]} for r in weak],
     }
 
 

@@ -59,6 +59,23 @@ def test_payment_link_gated_on_intake_and_photos(store):
     assert "error" in out and "cannot create payment link" in out["error"]
 
 
+def test_send_email_refused_after_first_reply(store):
+    class FakeMailer:
+        def __init__(self):
+            self.sent = []
+
+        def send_reply(self, thread_id, body):
+            self.sent.append(body)
+
+    make_job(store)
+    ctx = make_ctx(store)
+    ctx.mailer = FakeMailer()
+    assert tools.dispatch(ctx, "send_email", {"body": "Hi Jane, here's everything."}) == {"sent": True}
+    out = tools.dispatch(ctx, "send_email", {"body": "One more thing..."})
+    assert "error" in out and "already sent" in out["error"]
+    assert len(ctx.mailer.sent) == 1
+
+
 # ---- fence 2: operator authority ----
 
 def _msg(from_email, labels, sent_by_bot=False, body="@jason resume"):

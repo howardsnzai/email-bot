@@ -1,5 +1,9 @@
 """SupabaseStore contract test against a minimal in-process PostgREST fake —
-same behavioural assertions as the LocalFileStore tests, no network."""
+same behavioural assertions as the LocalFileStore tests, no network.
+
+The fake models the single jason_memory.customers table: email PK,
+preferences text, personal_details/past_jobs/conversations jsonb.
+"""
 
 import json
 
@@ -8,26 +12,38 @@ import pytest
 
 from jason.supabase_store import SupabaseStore
 
-PKS = {"agents": ["email"], "agencies": ["domain"], "jobs": ["thread_id"],
-       "video_jobs": ["agent_email", "job_id"]}
+DEFAULTS = {
+    "preferences": "",
+    "personal_details": {},
+    "past_jobs": [],
+    "conversations": [],
+}
 
 
 class FakePostgrest:
     def __init__(self):
-        self.tables = {t: [] for t in [*PKS, "emails"]}
-        self._serial = 0
+        self.rows: list[dict] = []
+
+    @staticmethod
+    def _contains(haystack, needle) -> bool:
+        """jsonb @> for the array-of-objects case used by get_job."""
+        return all(
+            any(isinstance(item, dict) and all(item.get(k) == v for k, v in obj.items())
+                for item in haystack)
+            for obj in needle
+        )
 
     def handler(self, request: httpx.Request) -> httpx.Response:
-        table = request.url.path.rsplit("/", 1)[-1]
-        rows = self.tables[table]
+        assert request.url.path.rsplit("/", 1)[-1] == "customers"
         params = dict(request.url.params)
         if request.method == "GET":
-            out = rows
+            out = self.rows
             for k, v in params.items():
                 if isinstance(v, str) and v.startswith("eq."):
                     out = [r for r in out if str(r.get(k)) == v[3:]]
-            if "order" in params:
-                out = sorted(out, key=lambda r: r.get(params["order"].split(".")[0]) or 0)
+                elif isinstance(v, str) and v.startswith("cs."):
+                    needle = json.loads(v[3:])
+                    out = [r for r in out if self._contains(r.get(k) or [], needle)]
             if "limit" in params:
                 out = out[: int(params["limit"])]
             if "select" in params and params["select"] != "*":
@@ -36,22 +52,13 @@ class FakePostgrest:
             return httpx.Response(200, json=out)
         if request.method == "POST":
             row = json.loads(request.content)
-            if table == "emails":
-                self._serial += 1
-                rows.append({**row, "id": self._serial})
+            existing = next((r for r in self.rows if r["email"] == row.get("email")), None)
+            if existing is not None:
+                if "merge-duplicates" not in request.headers.get("Prefer", ""):
+                    return httpx.Response(409, json={"message": "duplicate key"})
+                existing.update(row)
             else:
-                pk = PKS[table]
-                existing = next(
-                    (r for r in rows if all(r[k] == row.get(k) for k in pk)), None
-                )
-                if existing is not None:
-                    if "merge-duplicates" not in request.headers.get("Prefer", ""):
-                        return httpx.Response(409, json={"message": "duplicate key"})
-                    existing.update(row)
-                else:
-                    defaults = {"details": {}, "profile": "", "notes": "", "data": {},
-                                "record": {}, "status": "intake", "paid": False}
-                    rows.append({**defaults, **row})
+                self.rows.append({**DEFAULTS, **row})
             return httpx.Response(201, json=[row])
         return httpx.Response(405)
 
@@ -85,7 +92,7 @@ def test_agency_roundtrip(sb_store):
     assert "yellow" in sb_store.get_agency("raywhite.com")
 
 
-def test_job_roundtrip_and_paid_column(sb_store):
+def test_job_roundtrip_and_paid_flag(sb_store):
     job = {"job_id": "j1", "thread_id": "t1", "agent_email": "a@b.com",
            "status": "intake", "paid": False, "intake": {"format": "vertical"}}
     sb_store.put_job("t1", job)
@@ -95,6 +102,17 @@ def test_job_roundtrip_and_paid_column(sb_store):
     job["status"] = "paid"
     sb_store.put_job("t1", job)
     assert sb_store.get_job("t1")["paid"] is True
+    assert len(sb_store.list_jobs()) == 1
+
+
+def test_job_and_video_record_share_one_past_jobs_item(sb_store):
+    job = {"job_id": "j1", "thread_id": "t1", "agent_email": "a@b.com",
+           "status": "delivered", "paid": True}
+    sb_store.put_job("t1", job)
+    sb_store.put_video_job("a@b.com", "j1", {**job, "package": {"style": "modern"}})
+    # a later put_job must not drop keys the video record added
+    sb_store.put_job("t1", job)
+    assert sb_store.get_video_job("a@b.com", "j1")["package"] == {"style": "modern"}
     assert len(sb_store.list_jobs()) == 1
 
 
@@ -108,3 +126,13 @@ def test_emails_and_video_jobs(sb_store):
     sb_store.put_video_job("a@b.com", "j1", {"job_id": "j1", "status": "delivered"})
     assert sb_store.list_video_jobs("a@b.com") == ["j1"]
     assert sb_store.get_video_job("a@b.com", "j1")["status"] == "delivered"
+
+
+def test_schema_headers_are_configured():
+    store = SupabaseStore(url="https://fake.supabase.co", key="sb_secret_fake", schema="jason_memory")
+
+    assert store.schema == "jason_memory"
+    assert store.customers_table == "customers"
+    assert store._client.headers["user-agent"] == "jason-email-bot/1.0"
+    assert store._client.headers["accept-profile"] == "jason_memory"
+    assert store._client.headers["content-profile"] == "jason_memory"

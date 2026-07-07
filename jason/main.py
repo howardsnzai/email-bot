@@ -19,7 +19,12 @@ def main() -> None:
     mailer = GmailMailer()  # first run opens the OAuth consent flow
     webhook.set_mailer(mailer)
 
-    poll_thread = threading.Thread(target=poller.run_forever, name="poller", daemon=True)
+    poll_thread = threading.Thread(
+        target=poller.run_forever,
+        kwargs={"mailer": mailer},
+        name="poller",
+        daemon=True,
+    )
     poll_thread.start()
 
     uvicorn.run(webhook.app, host=config.WEBHOOK_HOST, port=config.WEBHOOK_PORT)

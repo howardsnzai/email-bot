@@ -80,8 +80,10 @@ class GmailMailer:
 
     # ---- reading ----
     def list_unprocessed(self) -> list[str]:
-        """Message ids in the inbox not yet handled by Jason."""
-        query = f"in:inbox -label:{config.LABEL_PROCESSED}"
+        """Message ids in the inbox not yet handled by Jason. `is:unread` is
+        enforced here regardless of GMAIL_SEARCH_QUERY: Jason only ever acts
+        on unopened mail, so a human opening an email claims it."""
+        query = f"{config.GMAIL_SEARCH_QUERY} is:unread -label:{config.LABEL_PROCESSED}"
         resp = (
             self.service.users().messages()
             .list(userId="me", q=query, maxResults=25).execute()
@@ -239,7 +241,13 @@ class GmailMailer:
         return sent["id"]
 
     def mark_processed(self, message_id: str) -> None:
-        self.add_label(message_id, config.LABEL_PROCESSED)
+        # Label it handled AND mark it read, so a processed email can never
+        # match the unread-only poll query again.
+        self.service.users().messages().modify(
+            userId="me", id=message_id,
+            body={"addLabelIds": [self.label_id(config.LABEL_PROCESSED)],
+                  "removeLabelIds": ["UNREAD"]},
+        ).execute()
 
 
 def guess_mime(path: str) -> str:

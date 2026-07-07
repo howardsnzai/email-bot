@@ -1,5 +1,6 @@
 openai>=1.50
 google-api-python-client>=2.140
+google-auth-httplib2>=0.2
 google-auth-oauthlib>=1.2
 google-auth>=2.30
 stripe>=10.0

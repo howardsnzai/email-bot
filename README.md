@@ -39,7 +39,7 @@ memory/            runtime data (gitignored); mirrors the future Supabase schema
    tool blocklists payment fields, and `trigger_render` refuses unpaid jobs. No email —
    however persuasive — can start a render.
 2. **Operator authority** — privileged `@jason` commands work only for the authenticated
-   operator (`howardsnz.ai@gmail.com`). Because that address is the bot's own inbox, an
+   operator (`jasonfromhowards1@gmail.com`). Because that address is the bot's own inbox, an
    authentic operator message must carry Gmail's `SENT` label (authored by the account)
    and not be one of Jason's own labelled outbound messages. A spoofed From header is
    just text and fails the check.
@@ -52,14 +52,14 @@ cp .env.example .env   # then fill it in
 ```
 
 ### 1. OpenRouter
-Set `OPENROUTER_API_KEY`. Default model is `anthropic/claude-sonnet-5`
+Set `OPENROUTER_API_KEY`. Default model is `qwen/qwen3.6-flash`
 (`OPENROUTER_MODEL` to change).
 
 ### 2. Gmail
 1. In Google Cloud Console: create a project, enable the **Gmail API**, and create
    **OAuth client ID** credentials of type **Desktop app**.
 2. Download the JSON as `credentials.json` in the repo root.
-3. First run opens a browser consent flow for `howardsnz.ai@gmail.com` and writes
+3. First run opens a browser consent flow for `jasonfromhowards1@gmail.com` and writes
    `token.json` (auto-refreshed afterwards).
 
 ### 3. Stripe
@@ -98,7 +98,7 @@ simulates the Stripe webhook (flips the flag, triggers the render, Jason confirm
 
 ### End-to-end smoke test (live)
 1. Start `python -m jason.main` with a filled `.env` and `stripe listen` forwarding.
-2. From another mailbox, email `howardsnz.ai@gmail.com` about a listing; converse
+2. From another mailbox, email `jasonfromhowards1@gmail.com` about a listing; converse
    through intake and attach 12+ photos.
 3. Pay through the Stripe test link Jason sends → watch the webhook flip the job to
    `paid`, the render package get submitted, and Jason's confirmation email arrive.
@@ -111,16 +111,18 @@ Two interchangeable backends behind the `Store` interface (`STORE_BACKEND=supaba
 Supabase is the default when `SUPABASE_URL`/`SUPABASE_KEY` are set):
 
 - **Supabase** (`jason/supabase_store.py`) — apply `migrations/001_memory.sql` in the
-  Supabase SQL editor first. Tables: `agents` (details jsonb + profile text),
-  `agencies`, `jobs` (full state jsonb + queryable status/paid columns), `video_jobs`,
-  `emails`. RLS is enabled with no policies, so only the secret key can reach the data.
+  Supabase SQL editor first. One table, `jason_memory.customers`: one row per
+  customer with `personal_details` (jsonb), `preferences` (text), `past_jobs` (jsonb
+  array of job dicts) and `conversations` (jsonb array of email entries); agency
+  notes reuse the table in a row keyed by the email domain. RLS is enabled with no
+  policies, so only the secret key can reach the data.
 - **Local files** under `memory/`, same layout, for development.
 
 The production split:
 
-- **Supabase (Postgres)** — all text and structured memory: `details.json` fields →
-  columns, `profile.md`/`agency.md` → text columns, job state and email archives →
-  tables.
+- **Supabase (Postgres)** — all text and structured memory: `details.json` →
+  `personal_details`, `profile.md`/`agency.md` → `preferences`, job state and email
+  archives → `past_jobs`/`conversations`.
 - **Cloudflare R2** — all binary assets: listing photos, logos, amenity imagery,
   render packages (S3-compatible; the render pipeline can pull photos directly).
 
@@ -132,4 +134,4 @@ nothing else changes.
 ## Deferred (not built yet)
 
 Preview/spec-before-payment, revisions, subscriptions/credits, photo upscaler, the
-Supabase `Store` implementation.
+Cloudflare R2 media store.

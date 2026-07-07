@@ -18,11 +18,20 @@ from jason.storage import Store, get_store
 log = logging.getLogger("jason.poller")
 
 
+def _ignored_sender(msg: dict) -> bool:
+    sender = f"{msg.get('from', '')} {msg.get('from_email', '')}".lower()
+    return any(pattern in sender for pattern in config.GMAIL_IGNORED_SENDER_PATTERNS)
+
+
 def process_message(store: Store, mailer: GmailMailer, message_id: str) -> None:
     msg = mailer.fetch_message(message_id)
 
     # Never react to our own outbound.
     if msg.get("sent_by_bot"):
+        mailer.mark_processed(message_id)
+        return
+    if _ignored_sender(msg):
+        log.info("ignored automated sender on message %s: %s", message_id, msg.get("from", ""))
         mailer.mark_processed(message_id)
         return
 
@@ -97,10 +106,10 @@ def ghost_sweep(store: Store) -> None:
             log.info("ghost sweep: job %s -> unfinished", job["job_id"])
 
 
-def run_forever() -> None:
+def run_forever(store: Store | None = None, mailer: GmailMailer | None = None) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
-    store = get_store()
-    mailer = GmailMailer()
+    store = store or get_store()
+    mailer = mailer or GmailMailer()
     log.info("Jason polling %s every %ss", config.OPERATOR_EMAIL, config.POLL_INTERVAL_SECONDS)
     last_sweep = 0.0
     while True:
