@@ -1,0 +1,22 @@
+{
+  "gmailCredentialsPath": "credentials.json",
+  "gmailTokenPath": "token.json",
+  "operatorEmail": "jasonfromhowards1@gmail.com",
+  "pollIntervalSeconds": 30,
+  "gmailSearchQuery": "in:inbox is:unread",
+  "gmailIgnoredSenderPatterns": ["no-reply", "noreply", "donotreply", "do-not-reply"],
+  "openrouterModel": "qwen/qwen3.6-flash",
+  "videoPriceCents": 19900,
+  "videoCurrency": "nzd",
+  "videoProductName": "Howards AI Marketing Video",
+  "renderUrl": "",
+  "webhookHost": "0.0.0.0",
+  "webhookPort": 8000,
+  "supabaseSchema": "jason_memory",
+  "supabaseCustomersTable": "customers",
+  "memoryDir": "./memory",
+  "ghostDays": 7,
+  "minPhotos": 12,
+  "minPhotoWidth": 1024,
+  "minPhotoHeight": 683
+}

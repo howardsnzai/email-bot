@@ -7,9 +7,11 @@ Code owns send/receive; the model only ever supplies email bodies.
 from __future__ import annotations
 
 import base64
+import json
 import logging
 import mimetypes
 from email.message import EmailMessage
+from html import escape
 from pathlib import Path
 
 from google.auth.transport.requests import Request
@@ -22,24 +24,50 @@ from jason.identity import parse_address
 
 log = logging.getLogger("jason.gmail")
 
-SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
+SCOPES = [
+    "https://www.googleapis.com/auth/gmail.modify",
+    "https://www.googleapis.com/auth/drive.readonly",
+    "https://www.googleapis.com/auth/drive.file",
+]
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".tif", ".tiff"}
+
+
+def _token_file_has_scopes(token_path: Path, scope_list: list[str]) -> bool:
+    try:
+        data = json.loads(token_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    raw_scopes = data.get("scopes") or data.get("scope") or []
+    if isinstance(raw_scopes, str):
+        scopes = set(raw_scopes.split())
+    else:
+        scopes = {str(scope) for scope in raw_scopes}
+    return set(scope_list).issubset(scopes)
 
 
 def get_service():
     creds = None
     token_path = Path(config.GMAIL_TOKEN_FILE)
-    if token_path.exists():
+    if token_path.exists() and _token_file_has_scopes(token_path, SCOPES):
         creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
+        if hasattr(creds, "has_scopes") and not creds.has_scopes(SCOPES):
+            creds = None
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(config.GMAIL_CREDENTIALS_FILE, SCOPES)
             creds = flow.run_local_server(port=0)
+        token_path.parent.mkdir(parents=True, exist_ok=True)
         token_path.write_text(creds.to_json())
     return build("gmail", "v1", credentials=creds, cache_discovery=False)
+
+
+def _plain_text_to_html(body: str) -> str:
+    escaped_body = escape((body or "").replace("\r\n", "\n").replace("\r", "\n"), quote=False)
+    html_body = escaped_body.replace("\n", "<br>")
+    return f"<html><body>{html_body}</body></html>"
 
 
 class GmailMailer:
@@ -227,7 +255,7 @@ class GmailMailer:
             em["In-Reply-To"] = in_reply_to
         if references:
             em["References"] = references
-        em.set_content(body)
+        em.set_content(_plain_text_to_html(body), subtype="html", cte="8bit")
         payload: dict = {"raw": base64.urlsafe_b64encode(em.as_bytes()).decode()}
         if thread_id:
             payload["threadId"] = thread_id

@@ -51,20 +51,27 @@ pip install -r requirements.txt
 cp .env.example .env   # then fill it in
 ```
 
+Configuration is split the same way as Main-Pipeline: secrets (API keys) go in
+`.env`; everything else (Gmail paths, poll interval, model, prices, webhook
+host/port, behaviour knobs) lives in `config/email-bot.json`.
+
 ### 1. OpenRouter
 Set `OPENROUTER_API_KEY`. Default model is `qwen/qwen3.6-flash`
-(`OPENROUTER_MODEL` to change).
+(`openrouterModel` in `config/email-bot.json` to change).
 
 ### 2. Gmail
 1. In Google Cloud Console: create a project, enable the **Gmail API**, and create
    **OAuth client ID** credentials of type **Desktop app**.
-2. Download the JSON as `credentials.json` in the repo root.
+2. Download the JSON as `credentials.json` in the repo root (path configurable via
+   `gmailCredentialsPath` in `config/email-bot.json`).
 3. First run opens a browser consent flow for `jasonfromhowards1@gmail.com` and writes
-   `token.json` (auto-refreshed afterwards).
+   `token.json` (auto-refreshed afterwards). The consent covers Gmail plus Google
+   Drive (`drive.readonly`, `drive.file`) — the same scope set Main-Pipeline uses —
+   and a cached token missing any of these scopes triggers a fresh consent flow.
 
 ### 3. Stripe
-1. Set `STRIPE_API_KEY` (test key first) and the price via `VIDEO_PRICE_CENTS` /
-   `VIDEO_CURRENCY`.
+1. Set `STRIPE_API_KEY` (test key first) and the price via `videoPriceCents` /
+   `videoCurrency` in `config/email-bot.json`.
 2. Point a webhook at `POST /webhooks/stripe` for the `checkout.session.completed`
    event and set `STRIPE_WEBHOOK_SECRET`. Local dev:
    `stripe listen --forward-to localhost:8000/webhooks/stripe`.
@@ -75,7 +82,8 @@ Set `OPENROUTER_API_KEY`. Default model is `qwen/qwen3.6-flash`
   with **image search** enabled, plus the Custom Search JSON API key.
 
 ### 5. Render pipeline
-Set `RENDER_URL` to POST assembled job packages to the pipeline; leave empty to write
+Set `renderUrl` in `config/email-bot.json` to POST assembled job packages to the
+pipeline; leave empty to write
 `package.json` into the job folder (stub mode). The pipeline calls back
 `POST /webhooks/render-complete {"thread_id": ..., "video_url": ...}` when the video
 (and its branded howards.ai page) is ready, and Jason sends the delivery email.
